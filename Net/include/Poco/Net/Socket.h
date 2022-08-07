@@ -22,6 +22,22 @@
 #include "Poco/Net/SocketImpl.h"
 #include <vector>
 
+#if defined(POCO_HAVE_FD_EPOLL)
+	#ifdef POCO_OS_FAMILY_WINDOWS
+		#include "Poco/Net/ServerSocket.h"
+		#include "Poco/Net/SocketAddress.h"
+		#include "wepoll.h"
+	#else
+		#include <sys/epoll.h>
+		#include <sys/eventfd.h>
+	#endif
+#elif defined(POCO_HAVE_FD_POLL)
+	#ifndef _WIN32
+		#include <poll.h>
+		#include "Poco/Pipe.h"
+	#endif
+#endif
+
 #ifdef POCO_NEW_STATE_ON_MOVE
 	#define POCO_CHECK_NEW_STATE_ON_MOVE poco_assert_dbg(POCO_NEW_STATE_ON_MOVE && _pImpl);
 #else
@@ -47,9 +63,11 @@ public:
 	enum SelectMode
 		/// The mode argument to poll() and select().
 	{
-		SELECT_READ  = 1,
-		SELECT_WRITE = 2,
-		SELECT_ERROR = 4
+		SELECT_READ  = SocketImpl::SELECT_READ,
+		SELECT_WRITE = SocketImpl::SELECT_WRITE,
+		SELECT_ERROR = SocketImpl::SELECT_ERROR,
+		SELECT_CONNECT = SocketImpl::SELECT_CONNECT,
+		SELECT_ACCEPT = SocketImpl::SELECT_ACCEPT
 	};
 
 	Socket();
@@ -343,6 +361,12 @@ public:
 		/// of the Socket object makes sense. One example is setting
 		/// a socket option before calling bind() on a ServerSocket.
 
+	short translateInterestMode(short mode) const;
+		/// Translate select mode to network events
+
+	short translateReadyEvents(short events, short interestMode) const;
+		/// Translate network events to select mode
+
 	static SocketBuf makeBuffer(void* buffer, std::size_t length);
 		/// Creates and returns buffer. Suitable for creating
 		/// the appropriate buffer for the platform.
@@ -390,7 +414,7 @@ public:
 	static void error();
 		/// Throws an appropriate exception for the last error.
 
-protected:
+	protected:
 	Socket(SocketImpl* pImpl);
 		/// Creates the Socket and attaches the given SocketImpl.
 		/// The socket takes ownership of the SocketImpl.
@@ -417,7 +441,7 @@ private:
 #endif
 
 	SocketImpl* _pImpl;
-};
+	};
 
 
 //
@@ -834,6 +858,21 @@ inline void Socket::init(int af)
 	POCO_CHECK_NEW_STATE_ON_MOVE;
 
 	_pImpl->init(af);
+}
+
+
+inline short Socket::translateInterestMode(short mode) const
+{
+	POCO_CHECK_NEW_STATE_ON_MOVE;
+
+	return _pImpl->translateInterestMode(mode);
+}
+
+inline short Socket::translateReadyEvents(short events, short interestMode) const
+{
+	POCO_CHECK_NEW_STATE_ON_MOVE;
+
+	return _pImpl->translateReadyEvents(events, interestMode);
 }
 
 

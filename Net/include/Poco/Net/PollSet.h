@@ -41,7 +41,9 @@ public:
 	{
 		POLL_READ  = Socket::SELECT_READ,
 		POLL_WRITE = Socket::SELECT_WRITE,
-		POLL_ERROR = Socket::SELECT_ERROR
+		POLL_ERROR = Socket::SELECT_ERROR,
+		POLL_CONNECT = Socket::SELECT_CONNECT,
+		POLL_ACCEPT = Socket::SELECT_ACCEPT
 	};
 
 	using SocketModeMap = std::map<Poco::Net::Socket, int>;
@@ -110,6 +112,9 @@ public:
 		/// Any errors that occur during this call are ignored.
 		/// On platforms/implementations where this functionality
 		/// is not available, it does nothing.
+
+	static short translateReadyMode(short mode);
+	static short translateInterestMode(short mode);
 private:
 	PollSetImpl* _pImpl;
 

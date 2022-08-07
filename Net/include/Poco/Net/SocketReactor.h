@@ -285,6 +285,8 @@ private:
 	NotificationPtr   _pReadableNotification;
 	NotificationPtr   _pWritableNotification;
 	NotificationPtr   _pErrorNotification;
+	NotificationPtr   _pConnectNotification;
+	NotificationPtr   _pAcceptNotification;
 	NotificationPtr   _pTimeoutNotification;
 	NotificationPtr   _pShutdownNotification;
 	MutexType         _mutex;

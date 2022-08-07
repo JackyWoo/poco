@@ -387,7 +387,9 @@ public:
 			{
 				it->events = 0;
 				it->revents = 0;
-				setMode(it->events, mode);
+
+				_interestMode[fd] = mode;
+				it->events = socket.translateInterestMode(mode);
 			}
 		}
 	}
@@ -400,6 +402,7 @@ public:
 		_addMap.clear();
 		_removeSet.clear();
 		_pollfds.reserve(1);
+		_interestMode.clear();
 	}
 
 	PollSet::SocketModeMap poll(const Poco::Timespan& timeout)
@@ -414,6 +417,7 @@ public:
 				{
 					if (_removeSet.find(it->fd) != _removeSet.end())
 					{
+						_interestMode.erase(it->fd);
 						it = _pollfds.erase(it);
 					}
 					else ++it;
@@ -421,17 +425,21 @@ public:
 				_removeSet.clear();
 			}
 
-			_pollfds.reserve(_pollfds.size() + _addMap.size());
-			for (auto it = _addMap.begin(); it != _addMap.end(); ++it)
+			if (!_addMap.empty())
 			{
-				pollfd pfd;
-				pfd.fd = it->first;
-				pfd.events = 0;
-				pfd.revents = 0;
-				setMode(pfd.events, it->second);
-				_pollfds.push_back(pfd);
+				_pollfds.reserve(_pollfds.size() + _addMap.size());
+				for (auto it = _addMap.begin(); it != _addMap.end(); ++it)
+				{
+					pollfd pfd;
+					pfd.fd = it->first;
+					pfd.events = 0;
+					pfd.revents = 0;
+					pfd.events = _socketMap[it->first].translateInterestMode(it->second);
+					_pollfds.push_back(pfd);
+					_interestMode[it->first] |= it->second;
+				}
+				_addMap.clear();
 			}
-			_addMap.clear();
 		}
 
 		if (_pollfds.empty()) return result;
@@ -455,6 +463,7 @@ public:
 		while (rc < 0 && SocketImpl::lastError() == POCO_EINTR);
 		if (rc < 0) SocketImpl::error();
 
+		if (rc != 0)
 		{
 			if (_pollfds[0].revents & POLLIN)
 			{
@@ -469,16 +478,11 @@ public:
 				for (auto it = _pollfds.begin() + 1; it != _pollfds.end(); ++it)
 				{
 					std::map<poco_socket_t, Socket>::const_iterator its = _socketMap.find(it->fd);
-					if (its != _socketMap.end())
+					if (its != _socketMap.end() && it->revents != 0)
 					{
-						if (it->revents & POLLIN)
-							result[its->second] |= PollSet::POLL_READ;
-						if (it->revents & POLLOUT)
-							result[its->second] |= PollSet::POLL_WRITE;
-						if (it->revents & POLLERR || (it->revents & POLLHUP))
-							result[its->second] |= PollSet::POLL_ERROR;
+						result[its->second] = its->second.translateReadyEvents(it->revents, _interestMode[its->first]);
+						it->revents = 0;
 					}
-					it->revents = 0;
 				}
 			}
 		}
@@ -500,20 +504,12 @@ public:
 
 private:
 
-	void setMode(short& target, int mode)
-	{
-		if (mode & PollSet::POLL_READ)
-			target |= POLLIN;
-
-		if (mode & PollSet::POLL_WRITE)
-			target |= POLLOUT;
-	}
-
 	mutable Poco::FastMutex         _mutex;
 	std::map<poco_socket_t, Socket> _socketMap;
 	std::map<poco_socket_t, int>    _addMap;
 	std::set<poco_socket_t>         _removeSet;
 	std::vector<pollfd>             _pollfds;
+	std::map<poco_socket_t, short>	_interestMode;
 	Poco::Pipe                      _pipe;
 };
 

@@ -29,4 +29,26 @@ ServerSocketImpl::~ServerSocketImpl()
 }
 
 
+short ServerSocketImpl::translateInterestMode(short mode) const
+{
+	short events{};
+	if (mode & SELECT_ACCEPT)
+		events |= POLLIN;
+	if (mode & SELECT_ERROR)
+		events |= POLLERR;
+	return events;
+}
+
+
+short ServerSocketImpl::translateReadyEvents(short events, short interestMode) const
+{
+	short mode{};
+	if (events & POLLIN && interestMode & SELECT_ACCEPT)
+		mode |= SELECT_ACCEPT;
+	if (events & POLLERR || (events & POLLHUP))
+		mode |= SELECT_ERROR;
+	return mode;
+}
+
+
 } } // namespace Poco::Net

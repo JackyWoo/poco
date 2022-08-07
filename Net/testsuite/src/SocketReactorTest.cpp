@@ -70,12 +70,15 @@ namespace
 			pNf->release();
 			char buffer[8];
 			int n = _socket.receiveBytes(buffer, sizeof(buffer));
+			std::cout << "server readable " << n << std::endl;
 			if (n > 0)
 			{
-				_socket.sendBytes(buffer, n);
+				int m = _socket.sendBytes(buffer, n);
+				std::cout << "server send back " << m << std::endl;
 			}
 			else
 			{
+				std::cout << "server destroy himself " << std::endl;
 				_reactor.removeEventHandler(_socket, Observer<EchoServiceHandler, ReadableNotification>(*this, &EchoServiceHandler::onReadable));
 				delete this;
 			}
@@ -126,6 +129,7 @@ namespace
 			pNf->release();
 			char buffer[32];
 			int n = _socket.receiveBytes(buffer, sizeof(buffer));
+			std::cout << "client readable " << n << std::endl;
 			if (n > 0)
 			{
 				_str.write(buffer, n);
@@ -139,6 +143,7 @@ namespace
 				checkReadableObserverCount(0);
 				if (_once)
 				{
+					std::cout << "client stop reactor for read nothing" << std::endl;
 					_reactor.stop();
 					delete this;
 					return;
@@ -146,6 +151,7 @@ namespace
 			}
 			if (_data.size() == MAX_DATA_SIZE)
 			{
+				std::cout << "client stop reactor on MAX_DATA_SIZE" << std::endl;
 				_reactor.stop();
 				delete this;
 			}
@@ -158,8 +164,10 @@ namespace
 			_reactor.removeEventHandler(_socket, Observer<ClientServiceHandler, WritableNotification>(*this, &ClientServiceHandler::onWritable));
 			checkWritableObserverCount(0);
 			std::string data(DATA_SIZE, 'x');
-			_socket.sendBytes(data.data(), (int) data.length());
+			int n = _socket.sendBytes(data.data(), (int) data.length());
 			_socket.shutdownSend();
+			std::cout << "client writable " << n << std::endl;
+			std::cout << "client shutdown send " << n << std::endl;
 		}
 
 		void onTimeout(TimeoutNotification* pNf)

@@ -140,6 +140,12 @@ void StreamSocket::connectNB(const SocketAddress& address)
 }
 
 
+void StreamSocket::finishConnect()
+{
+	impl()->finishConnect();
+}
+
+
 void StreamSocket::shutdownReceive()
 {
 	impl()->shutdownReceive();

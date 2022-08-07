@@ -36,6 +36,9 @@ public:
 protected:
 	virtual ~ServerSocketImpl();
 		/// Destroys the ServerSocketImpl.
+
+	short translateInterestMode(short mode) const override;
+	short translateReadyEvents(short events, short interestMode) const override;
 };
 
 

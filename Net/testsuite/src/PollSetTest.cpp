@@ -204,6 +204,7 @@ void PollSetTest::testPollNB()
 
 	PollSet ps;
 	assertTrue(ps.empty());
+	ps.add(ss1, PollSet::POLL_CONNECT);
 	ps.add(ss1, PollSet::POLL_READ);
 	ps.add(ss1, PollSet::POLL_WRITE);
 	assertTrue(!ps.empty());
@@ -216,7 +217,11 @@ void PollSetTest::testPollNB()
 	PollSet::SocketModeMap sm;
 	while (sm.empty()) sm = ps.poll(timeout);
 	assertTrue(sm.find(ss1) != sm.end());
+	assertTrue(sm.find(ss1)->second & PollSet::POLL_CONNECT);
+	ss1.finishConnect();
+	sm = ps.poll(timeout);
 	assertTrue(sm.find(ss1)->second & PollSet::POLL_WRITE);
+	assertTrue(!(sm.find(ss1)->second & PollSet::POLL_CONNECT));
 
 	ss1.setBlocking(true);
 	ss1.sendBytes("hello", 5);
@@ -332,8 +337,8 @@ void PollSetTest::testPollNoServer()
 	ss2.connectNB(SocketAddress("127.0.0.1", 0xFEFF));
 	PollSet ps;
 	assertTrue(ps.empty());
-	ps.add(ss1, PollSet::POLL_READ | PollSet::POLL_WRITE | PollSet::POLL_ERROR);
-	ps.add(ss2, PollSet::POLL_READ | PollSet::POLL_WRITE | PollSet::POLL_ERROR);
+	ps.add(ss1, PollSet::POLL_CONNECT | PollSet::POLL_READ | PollSet::POLL_WRITE | PollSet::POLL_ERROR);
+	ps.add(ss2, PollSet::POLL_CONNECT | PollSet::POLL_READ | PollSet::POLL_WRITE | PollSet::POLL_ERROR);
 	assertTrue(!ps.empty());
 	assertTrue(ps.has(ss1));
 	assertTrue(ps.has(ss2));

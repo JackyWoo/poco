@@ -40,6 +40,10 @@ void SocketNotifier::addObserver(SocketReactor* pReactor, const Poco::AbstractOb
 		_events.insert(pReactor->_pReadableNotification.get());
 	else if (observer.accepts(pReactor->_pWritableNotification))
 		_events.insert(pReactor->_pWritableNotification.get());
+	else if (observer.accepts(pReactor->_pConnectNotification))
+		_events.insert(pReactor->_pConnectNotification.get());
+	else if (observer.accepts(pReactor->_pAcceptNotification))
+		_events.insert(pReactor->_pAcceptNotification.get());
 	else if (observer.accepts(pReactor->_pErrorNotification))
 		_events.insert(pReactor->_pErrorNotification.get());
 	else if (observer.accepts(pReactor->_pTimeoutNotification))
@@ -56,6 +60,10 @@ void SocketNotifier::removeObserver(SocketReactor* pReactor, const Poco::Abstrac
 		it = _events.find(pReactor->_pReadableNotification.get());
 	else if (observer.accepts(pReactor->_pWritableNotification))
 		it = _events.find(pReactor->_pWritableNotification.get());
+	else if (observer.accepts(pReactor->_pConnectNotification))
+		it = _events.find(pReactor->_pConnectNotification.get());
+	else if (observer.accepts(pReactor->_pAcceptNotification))
+		it = _events.find(pReactor->_pAcceptNotification.get());
 	else if (observer.accepts(pReactor->_pErrorNotification))
 		it = _events.find(pReactor->_pErrorNotification.get());
 	else if (observer.accepts(pReactor->_pTimeoutNotification))

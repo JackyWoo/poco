@@ -51,7 +51,7 @@ class SocketAcceptor
 	/// an application-specific way.
 	///
 	/// The SocketAcceptor sets up a ServerSocket and registers itself
-	/// for a ReadableNotification, denoting an incoming connection request.
+	/// for a AcceptNotification, denoting an incoming connection request.
 	///
 	/// When the ServerSocket becomes readable the SocketAcceptor accepts
 	/// the connection request and creates a ServiceHandler to
@@ -68,7 +68,7 @@ class SocketAcceptor
 	/// if special steps are necessary to create a ServiceHandler object.
 {
 public:
-	using Observer = Poco::Observer<SocketAcceptor, ReadableNotification>;
+	using Observer = Poco::Observer<SocketAcceptor, AcceptNotification>;
 
 	explicit SocketAcceptor(ServerSocket& socket):
 		_socket(socket),
@@ -142,11 +142,13 @@ public:
 		}
 	}
 
-	void onAccept(ReadableNotification* pNotification)
+	void onAccept(AcceptNotification* pNotification)
 		/// Accepts connection and creates event handler.
 	{
 		pNotification->release();
 		StreamSocket sock = _socket.acceptConnection();
+		std::cout << _socket.impl()->sockfd() << " accept connection " << sock.impl()->sockfd() << std::endl;
+		std::cout << sock.impl()->sockfd() << " connected " << sock.impl()->isConnected() << std::endl;
 		_pReactor->wakeUp();
 		createServiceHandler(sock);
 	}

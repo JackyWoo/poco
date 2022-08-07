@@ -87,6 +87,9 @@ public:
 	{
 		_socket.connectNB(address);
 		if (doRegister) registerConnector(reactor);
+		std::cout << _socket.impl()->sockfd() << " connect " << std::endl;
+		std::cout << _socket.impl()->sockfd() << " isConnected " << _socket.impl()->isConnected() << std::endl;
+		std::cout << _socket.impl()->sockfd() << " isConnectionPending " << _socket.impl()->isConnectionPending() << std::endl;
 	}
 
 	virtual ~SocketConnector()
@@ -111,8 +114,8 @@ public:
 		/// The overriding method must call the baseclass implementation first.
 	{
 		_pReactor = &reactor;
-		_pReactor->addEventHandler(_socket, Poco::Observer<SocketConnector, ReadableNotification>(*this, &SocketConnector::onReadable));
-		_pReactor->addEventHandler(_socket, Poco::Observer<SocketConnector, WritableNotification>(*this, &SocketConnector::onWritable));
+		std::cout << _socket.impl()->sockfd() << " registerConnector " << std::endl;
+		_pReactor->addEventHandler(_socket, Poco::Observer<SocketConnector, ConnectNotification>(*this, &SocketConnector::onConnect));
 		_pReactor->addEventHandler(_socket, Poco::Observer<SocketConnector, ErrorNotification>(*this, &SocketConnector::onError));
 	}
 
@@ -126,39 +129,29 @@ public:
 	{
 		if (_pReactor)
 		{
-			_pReactor->removeEventHandler(_socket, Poco::Observer<SocketConnector, ReadableNotification>(*this, &SocketConnector::onReadable));
-			_pReactor->removeEventHandler(_socket, Poco::Observer<SocketConnector, WritableNotification>(*this, &SocketConnector::onWritable));
+			std::cout << _socket.impl()->sockfd() << " un‰registerConnector " << std::endl;
+			_pReactor->removeEventHandler(_socket, Poco::Observer<SocketConnector, ConnectNotification>(*this, &SocketConnector::onConnect));
 			_pReactor->removeEventHandler(_socket, Poco::Observer<SocketConnector, ErrorNotification>(*this, &SocketConnector::onError));
 		}
 	}
 
-	void onReadable(ReadableNotification* pNotification)
-	{
-		unregisterConnector();
-		pNotification->release();
-		int err = _socket.impl()->socketError(); 
-		if (err) onError(err);
-		else onConnect();
-	}
-
-	void onWritable(WritableNotification* pNotification)
-	{
-		unregisterConnector();
-		pNotification->release();
-		onConnect();
-	}
 
 	void onError(ErrorNotification* pNotification)
 	{
+		std::cout<<_socket.impl()->sockfd() << " connect onerror" << std::endl;
 		unregisterConnector();
 		pNotification->release();
 		onError(_socket.impl()->socketError());
 	}
 
-	void onConnect()
+	void onConnect(ConnectNotification* pNotification)
 	{
+		std::cout<<_socket.impl()->sockfd() << " onconnect" << std::endl;
+		unregisterConnector();
+		pNotification->release();
 		_socket.setBlocking(true);
 		createServiceHandler();
+		onConnect();
 	}
 
 protected:
@@ -172,6 +165,13 @@ protected:
 
 	virtual void onError(int errorCode)
 		/// Called when the socket cannot be connected.
+		///
+		/// Subclasses can override this method.
+	{
+	}
+
+	virtual void onConnect()
+		/// Called when the socket connected to the remote.
 		///
 		/// Subclasses can override this method.
 	{

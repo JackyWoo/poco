@@ -47,6 +47,11 @@ StreamSocketImpl::StreamSocketImpl(poco_socket_t sockfd): SocketImpl(sockfd)
 }
 
 
+StreamSocketImpl::StreamSocketImpl(poco_socket_t sockfd, State state): SocketImpl(sockfd, state)
+{
+}
+
+
 StreamSocketImpl::~StreamSocketImpl()
 {
 }
@@ -71,6 +76,36 @@ int StreamSocketImpl::sendBytes(const void* buffer, int length, int flags)
 			break;
 	}
 	return sent;
+}
+
+
+short StreamSocketImpl::translateInterestMode(short mode) const
+{
+	short events{};
+	if (mode & SELECT_READ)
+		events |= POLLIN;
+	if (mode & SELECT_WRITE)
+		events |= POLLOUT;
+	if (mode & SELECT_ERROR)
+		events |= POLLERR;
+	if (mode & SELECT_CONNECT)
+		events |= POLLOUT;
+	return events;
+}
+
+
+short StreamSocketImpl::translateReadyEvents(short events, short interestMode) const
+{
+	short mode{};
+	if (events & POLLIN && isConnected() && interestMode & SELECT_READ)
+		mode |= SELECT_READ;
+	if (events & POLLOUT && isConnected() && interestMode & SELECT_WRITE)
+		mode |= SELECT_WRITE;
+	if (events & POLLOUT && isConnectionPending() && interestMode & SELECT_CONNECT)
+		mode |= SELECT_CONNECT;
+	if ((events & POLLERR || events & POLLHUP) && interestMode & SELECT_ERROR)
+		mode |= SELECT_ERROR;
+	return mode;
 }
 
 

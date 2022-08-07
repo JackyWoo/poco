@@ -120,6 +120,30 @@ inline const std::string& ErrorNotification::description() const
 }
 
 
+class Net_API ConnectNotification: public SocketNotification
+	/// This notification is sent if a socket connect event occur.
+{
+public:
+	ConnectNotification(SocketReactor* pReactor);
+	/// Creates the ConnectNotification for the given SocketReactor.
+
+	~ConnectNotification();
+	/// Destroys the ConnectNotification.
+};
+
+
+class Net_API AcceptNotification: public SocketNotification
+	/// This notification is sent if a socket accept event occur.
+{
+public:
+	AcceptNotification(SocketReactor* pReactor);
+	/// Creates the AcceptNotification for the given SocketReactor.
+
+	~AcceptNotification();
+	/// Destroys the AcceptNotification.
+};
+
+
 class Net_API TimeoutNotification: public SocketNotification
 	/// This notification is sent if no other event has occurred
 	/// for a specified time.

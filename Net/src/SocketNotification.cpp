@@ -58,6 +58,28 @@ WritableNotification::~WritableNotification()
 }
 
 
+ConnectNotification::ConnectNotification(SocketReactor* pReactor):
+	SocketNotification(pReactor)
+{
+}
+
+
+ConnectNotification::~ConnectNotification()
+{
+}
+
+
+AcceptNotification::AcceptNotification(SocketReactor* pReactor):
+	SocketNotification(pReactor)
+{
+}
+
+
+AcceptNotification::~AcceptNotification()
+{
+}
+
+
 ErrorNotification::ErrorNotification(SocketReactor* pReactor, int code, const std::string& description):
 	SocketNotification(pReactor),
 	_code(code),

@@ -31,6 +31,8 @@ SocketReactor::SocketReactor():
 	_stop(false),
 	_pReadableNotification(new ReadableNotification(this)),
 	_pWritableNotification(new WritableNotification(this)),
+	_pConnectNotification(new ConnectNotification(this)),
+	_pAcceptNotification(new AcceptNotification(this)),
 	_pErrorNotification(new ErrorNotification(this)),
 	_pTimeoutNotification(new TimeoutNotification(this)),
 	_pShutdownNotification(new ShutdownNotification(this))
@@ -43,6 +45,8 @@ SocketReactor::SocketReactor(const Poco::Timespan& pollTimeout, int threadAffini
 	_stop(false),
 	_pReadableNotification(new ReadableNotification(this)),
 	_pWritableNotification(new WritableNotification(this)),
+	_pConnectNotification(new ConnectNotification(this)),
+	_pAcceptNotification(new AcceptNotification(this)),
 	_pErrorNotification(new ErrorNotification(this)),
 	_pTimeoutNotification(new TimeoutNotification(this)),
 	_pShutdownNotification(new ShutdownNotification(this))
@@ -56,6 +60,8 @@ SocketReactor::SocketReactor(const Params& params, int threadAffinity):
 	_stop(false),
 	_pReadableNotification(new ReadableNotification(this)),
 	_pWritableNotification(new WritableNotification(this)),
+	_pConnectNotification(new ConnectNotification(this)),
+	_pAcceptNotification(new AcceptNotification(this)),
 	_pErrorNotification(new ErrorNotification(this)),
 	_pTimeoutNotification(new TimeoutNotification(this)),
 	_pShutdownNotification(new ShutdownNotification(this))
@@ -98,8 +104,21 @@ void SocketReactor::run()
 						{
 							dispatch(s.first, _pWritableNotification);
 						}
+						if (s.second & PollSet::POLL_CONNECT)
+						{
+							_pollSet.update(s.first, s.second & ~PollSet::POLL_CONNECT);
+							s.first.impl()->finishConnect();
+							dispatch(s.first, _pConnectNotification);
+						}
+						if (s.second & PollSet::POLL_ACCEPT)
+						{
+							dispatch(s.first, _pAcceptNotification);
+						}
 						if (s.second & PollSet::POLL_ERROR)
 						{
+							SocketImpl * pImpl = s.first.impl();
+							if (pImpl->isConnectionPending())
+								pImpl->finishConnect(pImpl->socketError());
 							dispatch(s.first, _pErrorNotification);
 						}
 					}
@@ -119,8 +138,10 @@ void SocketReactor::run()
 						ErrorHandler::handle();
 					}
 				}
-				if (0 == sm.size())
+				if (sm.empty())
 				{
+					// TODO It is not a reliable fashion for
+					//  sm will be empty when wake up from poll.
 					onTimeout();
 					if (_params.throttle && _params.pollTimeout == 0)
 					{
@@ -181,6 +202,9 @@ bool SocketReactor::hasSocketHandlers()
 		{
 			if (p.second->accepts(_pReadableNotification) ||
 				p.second->accepts(_pWritableNotification) ||
+				p.second->accepts(_pConnectNotification) ||
+				p.second->accepts(_pAcceptNotification) ||
+				p.second->accepts(_pTimeoutNotification) ||
 				p.second->accepts(_pErrorNotification)) return true;
 		}
 	}
@@ -199,6 +223,9 @@ void SocketReactor::addEventHandler(const Socket& socket, const Poco::AbstractOb
 	if (pNotifier->accepts(_pReadableNotification)) mode |= PollSet::POLL_READ;
 	if (pNotifier->accepts(_pWritableNotification)) mode |= PollSet::POLL_WRITE;
 	if (pNotifier->accepts(_pErrorNotification))    mode |= PollSet::POLL_ERROR;
+	if (pNotifier->accepts(_pConnectNotification))  mode |= PollSet::POLL_CONNECT;
+	if (pNotifier->accepts(_pAcceptNotification))  mode |= PollSet::POLL_ACCEPT;
+	_pollSet.update(socket, mode);
 	if (mode) _pollSet.add(socket, mode);
 }
 
@@ -250,6 +277,8 @@ void SocketReactor::removeEventHandler(const Socket& socket, const Poco::Abstrac
 			if (pNotifier->accepts(_pReadableNotification)) mode |= PollSet::POLL_READ;
 			if (pNotifier->accepts(_pWritableNotification)) mode |= PollSet::POLL_WRITE;
 			if (pNotifier->accepts(_pErrorNotification))    mode |= PollSet::POLL_ERROR;
+			if (pNotifier->accepts(_pConnectNotification))  mode |= PollSet::POLL_CONNECT;
+			if (pNotifier->accepts(_pAcceptNotification))  mode |= PollSet::POLL_ACCEPT;
 			_pollSet.update(socket, mode);
 		}
 	}

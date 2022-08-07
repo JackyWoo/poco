@@ -20,20 +20,6 @@
 #include <string.h> // FD_SET needs memset on some platforms, so we can't use <cstring>
 
 
-#if defined(POCO_HAVE_FD_EPOLL)
-	#ifdef POCO_OS_FAMILY_WINDOWS
-		#include "wepoll.h"
-	#else
-		#include <sys/epoll.h>
-		#include <sys/eventfd.h>
-	#endif
-#elif defined(POCO_HAVE_FD_POLL)
-	#ifndef _WIN32
-		#include <poll.h>
-	#endif
-#endif
-
-
 #if defined(sun) || defined(__sun) || defined(__sun__)
 #include <unistd.h>
 #include <stropts.h>
@@ -92,17 +78,27 @@ bool checkIsBrokenTimeout()
 
 
 SocketImpl::SocketImpl():
-	_sockfd(POCO_INVALID_SOCKET),
-	_blocking(true),
-	_isBrokenTimeout(checkIsBrokenTimeout())
+		_sockfd(POCO_INVALID_SOCKET),
+		_blocking(true),
+		_isBrokenTimeout(checkIsBrokenTimeout()),
+		_state(STATE_UNCONNECTED)
 {
 }
 
 
 SocketImpl::SocketImpl(poco_socket_t sockfd):
-	_sockfd(sockfd),
-	_blocking(true),
-	_isBrokenTimeout(checkIsBrokenTimeout())
+		_sockfd(sockfd),
+		_blocking(true),
+		_isBrokenTimeout(checkIsBrokenTimeout()),
+		_state(STATE_UNCONNECTED)
+{
+}
+
+SocketImpl::SocketImpl(poco_socket_t sockfd, State state):
+		_sockfd(sockfd),
+		_blocking(true),
+		_isBrokenTimeout(checkIsBrokenTimeout()),
+		_state(state)
 {
 }
 
@@ -129,7 +125,7 @@ SocketImpl* SocketImpl::acceptConnection(SocketAddress& clientAddr)
 	if (sd != POCO_INVALID_SOCKET)
 	{
 		clientAddr = SocketAddress(pSA, saLen);
-		return new StreamSocketImpl(sd);
+		return new StreamSocketImpl(sd, STATE_CONNECTED);
 	}
 	error(); // will throw
 	return 0;
@@ -142,6 +138,9 @@ void SocketImpl::connect(const SocketAddress& address)
 	{
 		init(address.af());
 	}
+
+	beginConnect();
+
 	int rc;
 	do
 	{
@@ -155,8 +154,11 @@ void SocketImpl::connect(const SocketAddress& address)
 	if (rc != 0)
 	{
 		int err = lastError();
+		finishConnect(err);
 		error(err, address.toString());
 	}
+
+	finishConnect();
 }
 
 
@@ -166,7 +168,11 @@ void SocketImpl::connect(const SocketAddress& address, const Poco::Timespan& tim
 	{
 		init(address.af());
 	}
+
 	setBlocking(false);
+	beginConnect();
+
+	int err = 0;
 	try
 	{
 #if defined(POCO_VXWORKS)
@@ -176,10 +182,10 @@ void SocketImpl::connect(const SocketAddress& address, const Poco::Timespan& tim
 #endif
 		if (rc != 0)
 		{
-			int err = lastError();
+			err = lastError();
 			if (err != POCO_EINPROGRESS && err != POCO_EWOULDBLOCK)
 				error(err, address.toString());
-			if (!poll(timeout, SELECT_READ | SELECT_WRITE | SELECT_ERROR))
+			if (!poll(timeout, SELECT_CONNECT | SELECT_ERROR))
 				throw Poco::TimeoutException("connect timed out", address.toString());
 			err = socketError();
 			if (err != 0) error(err);
@@ -188,9 +194,11 @@ void SocketImpl::connect(const SocketAddress& address, const Poco::Timespan& tim
 	catch (Poco::Exception&)
 	{
 		setBlocking(true);
+		finishConnect(err);
 		throw;
 	}
 	setBlocking(true);
+	finishConnect();
 }
 
 
@@ -200,18 +208,42 @@ void SocketImpl::connectNB(const SocketAddress& address)
 	{
 		init(address.af());
 	}
+
 	setBlocking(false);
+	beginConnect();
+
 #if defined(POCO_VXWORKS)
 	int rc = ::connect(_sockfd, (sockaddr*) address.addr(), address.length());
 #else
 	int rc = ::connect(_sockfd, address.addr(), address.length());
 #endif
+	int err = 0;
 	if (rc != 0)
 	{
-		int err = lastError();
+		err = lastError();
 		if (err != POCO_EINPROGRESS && err != POCO_EWOULDBLOCK)
 			error(err, address.toString());
 	}
+	else
+		// Already connected before method return.
+		finishConnect(err);
+}
+
+
+void SocketImpl::beginConnect()
+{
+	auto expected = STATE_UNCONNECTED;
+	_state.compare_exchange_strong(expected, STATE_CONNECTIONPENDING);
+}
+
+
+void SocketImpl::finishConnect(int error)
+{
+	auto expected = STATE_CONNECTIONPENDING;
+	if (error)
+		_state.compare_exchange_strong(expected, STATE_UNCONNECTED);
+	else
+		_state.compare_exchange_strong(expected, STATE_CONNECTED);
 }
 
 
@@ -285,6 +317,7 @@ void SocketImpl::close()
 		poco_closesocket(_sockfd);
 		_sockfd = POCO_INVALID_SOCKET;
 	}
+	_state = STATE_CLOSED;
 }
 
 
@@ -327,6 +360,33 @@ void SocketImpl::checkBrokenTimeout(SelectMode mode)
 		}
 	}
 }
+
+
+short SocketImpl::translateInterestMode(short mode) const
+{
+	short events{};
+	if (mode & SELECT_READ)
+		events |= POLLIN;
+	if (mode & SELECT_WRITE)
+		events |= POLLOUT;
+	if (mode & SELECT_ERROR)
+		events |= POLLERR;
+	return events;
+}
+
+
+short SocketImpl::translateReadyEvents(short events, short interestMode) const
+{
+	short mode{};
+	if (events & POLLIN)
+		mode |= SELECT_READ;
+	if (events & POLLOUT)
+		mode |= SELECT_WRITE;
+	if (events & POLLERR || (events & POLLHUP))
+		mode |= SELECT_ERROR;
+	return mode;
+}
+
 
 
 int SocketImpl::sendBytes(const void* buffer, int length, int flags)
@@ -700,6 +760,8 @@ bool SocketImpl::poll(const Poco::Timespan& timeout, int mode)
 	pollBuf.fd = _sockfd;
 	if (mode & SELECT_READ) pollBuf.events |= POLLIN;
 	if (mode & SELECT_WRITE) pollBuf.events |= POLLOUT;
+	if (mode & SELECT_CONNECT) pollBuf.events |= POLLOUT;
+	if (mode & SELECT_ACCEPT) pollBuf.events |= POLLIN;
 
 	Poco::Timespan remainingTime(timeout);
 	int rc;

@@ -128,6 +128,8 @@ public:
 		/// the TCP server at the given address. Prior to opening the
 		/// connection the socket is set to nonblocking mode.
 
+	virtual void finishConnect();
+
 	void bind(const SocketAddress& address, bool reuseAddress = false, bool ipV6Only = false);
 		/// Bind a local address to the socket.
 		///

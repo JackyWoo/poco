@@ -25,6 +25,19 @@
 #include "Poco/Timespan.h"
 #include "Poco/Buffer.h"
 
+#if defined(POCO_HAVE_FD_EPOLL)
+	#ifdef POCO_OS_FAMILY_WINDOWS
+		#include "wepoll.h"
+	#else
+		#include <sys/epoll.h>
+		#include <sys/eventfd.h>
+	#endif
+#elif defined(POCO_HAVE_FD_POLL)
+	#ifndef _WIN32
+		#include <poll.h>
+	#endif
+#endif
+
 
 namespace Poco {
 namespace Net {
@@ -50,7 +63,18 @@ public:
 	{
 		SELECT_READ  = 1,
 		SELECT_WRITE = 2,
-		SELECT_ERROR = 4
+		SELECT_ERROR = 4,
+		SELECT_CONNECT = 8,
+		SELECT_ACCEPT = 16,
+	};
+
+	enum State
+	{
+		STATE_UNCONNECTED,
+		STATE_CONNECTIONPENDING,
+		STATE_CONNECTED,
+		STATE_CLOSING,
+		STATE_CLOSED
 	};
 
 	virtual SocketImpl* acceptConnection(SocketAddress& clientAddr);
@@ -81,6 +105,9 @@ public:
 		/// Initializes the socket and establishes a connection to
 		/// the TCP server at the given address. Prior to opening the
 		/// connection the socket is set to nonblocking mode.
+
+	virtual void beginConnect();
+	virtual void finishConnect(int error = 0);
 
 	virtual void bind(const SocketAddress& address, bool reuseAddress = false);
 		/// Bind a local address to the socket.
@@ -465,11 +492,22 @@ public:
 	bool initialized() const;
 		/// Returns true iff the underlying socket is initialized.
 
+	bool isConnected() const;
+		/// Returns true iff the underlying socket is connected to remote.
+		/// It is only for StreamSocket.
+
+	bool isConnectionPending() const;
+		/// Returns true iff the underlying socket is pending connect to remote.
+		/// It is only for StreamSocket.
+
 protected:
 	SocketImpl();
 		/// Creates a SocketImpl.
 
 	SocketImpl(poco_socket_t sockfd);
+		/// Creates a SocketImpl using the given native socket.
+
+	SocketImpl(poco_socket_t sockfd, State state);
 		/// Creates a SocketImpl using the given native socket.
 
 	virtual ~SocketImpl();
@@ -505,6 +543,12 @@ protected:
 
 	void checkBrokenTimeout(SelectMode mode);
 
+	virtual short translateInterestMode(short mode) const;
+		/// Translate select mode to net events
+
+	virtual short translateReadyEvents(short events, short interestMode) const;
+		/// Translate network events to select mode
+
 	static int lastError();
 		/// Returns the last error code.
 
@@ -524,11 +568,12 @@ private:
 	SocketImpl(const SocketImpl&);
 	SocketImpl& operator = (const SocketImpl&);
 
-	poco_socket_t  _sockfd;
-	Poco::Timespan _recvTimeout;
-	Poco::Timespan _sndTimeout;
-	bool           _blocking;
-	bool           _isBrokenTimeout;
+	poco_socket_t      _sockfd;
+	Poco::Timespan     _recvTimeout;
+	Poco::Timespan     _sndTimeout;
+	bool               _blocking;
+	bool               _isBrokenTimeout;
+	std::atomic<State> _state;
 
 	friend class Socket;
 	friend class SecureSocketImpl;
@@ -559,6 +604,18 @@ inline poco_socket_t SocketImpl::sockfd() const
 inline bool SocketImpl::initialized() const
 {
 	return _sockfd != POCO_INVALID_SOCKET;
+}
+
+
+inline bool SocketImpl::isConnected() const
+{
+	return _state == STATE_CONNECTED;
+}
+
+
+inline bool SocketImpl::isConnectionPending() const
+{
+	return _state == STATE_CONNECTIONPENDING;
 }
 
 

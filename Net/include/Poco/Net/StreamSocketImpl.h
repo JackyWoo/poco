@@ -40,6 +40,9 @@ public:
 	StreamSocketImpl(poco_socket_t sockfd);
 		/// Creates a StreamSocketImpl using the given native socket.
 
+	StreamSocketImpl(poco_socket_t sockfd, State state);
+		/// Creates a StreamSocketImpl using the given native socket.
+
 	virtual int sendBytes(const void* buffer, int length, int flags = 0);
 		/// Ensures that all data in buffer is sent if the socket
 		/// is blocking. In case of a non-blocking socket, sends as
@@ -50,6 +53,9 @@ public:
 
 protected:
 	virtual ~StreamSocketImpl();
+
+	short translateInterestMode(short mode) const override;
+	short translateReadyEvents(short events, short interestMode) const override;
 };
 
 
