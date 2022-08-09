@@ -20,6 +20,20 @@
 #include <string.h> // FD_SET needs memset on some platforms, so we can't use <cstring>
 
 
+#if defined(POCO_HAVE_FD_EPOLL)
+	#ifdef POCO_OS_FAMILY_WINDOWS
+		#include "wepoll.h"
+	#else
+		#include <sys/epoll.h>
+		#include <sys/eventfd.h>
+	#endif
+	#elif defined(POCO_HAVE_FD_POLL)
+		#ifndef _WIN32
+			#include <poll.h>
+		#endif
+#endif
+
+
 #if defined(sun) || defined(__sun) || defined(__sun__)
 #include <unistd.h>
 #include <stropts.h>
@@ -365,12 +379,21 @@ void SocketImpl::checkBrokenTimeout(SelectMode mode)
 short SocketImpl::translateInterestMode(short mode) const
 {
 	short events{};
+#if defined(POCO_HAVE_FD_EPOLL)
+	if (mode & SELECT_READ)
+		events |= EPOLLIN;
+	if (mode & SELECT_WRITE)
+		events |= EPOLLOUT;
+	if (mode & SELECT_ERROR)
+		events |= EPOLLERR;
+#elif defined(POCO_HAVE_FD_POLL)
 	if (mode & SELECT_READ)
 		events |= POLLIN;
 	if (mode & SELECT_WRITE)
 		events |= POLLOUT;
 	if (mode & SELECT_ERROR)
 		events |= POLLERR;
+#endif
 	return events;
 }
 
@@ -378,12 +401,21 @@ short SocketImpl::translateInterestMode(short mode) const
 short SocketImpl::translateReadyEvents(short events, short interestMode) const
 {
 	short mode{};
+#if defined(POCO_HAVE_FD_EPOLL)
+	if (events & EPOLLIN)
+		mode |= SELECT_READ;
+	if (events & EPOLLOUT)
+		mode |= SELECT_WRITE;
+	if (events & EPOLLERR || (events & EPOLLHUP))
+		mode |= SELECT_ERROR;
+#elif defined(POCO_HAVE_FD_POLL)
 	if (events & POLLIN)
 		mode |= SELECT_READ;
 	if (events & POLLOUT)
 		mode |= SELECT_WRITE;
 	if (events & POLLERR || (events & POLLHUP))
 		mode |= SELECT_ERROR;
+#endif
 	return mode;
 }
 
@@ -720,6 +752,10 @@ bool SocketImpl::poll(const Poco::Timespan& timeout, int mode)
 		evin.events |= EPOLLOUT;
 	if (mode & SELECT_ERROR)
 		evin.events |= EPOLLERR;
+	if (mode & SELECT_CONNECT)
+		evin.events |= EPOLLOUT;
+	if (mode & SELECT_ERROR)
+		evin.events |= EPOLLIN;
 
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, sockfd, &evin) < 0)
 	{

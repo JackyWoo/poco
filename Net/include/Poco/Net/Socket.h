@@ -414,7 +414,7 @@ public:
 	static void error();
 		/// Throws an appropriate exception for the last error.
 
-	protected:
+protected:
 	Socket(SocketImpl* pImpl);
 		/// Creates the Socket and attaches the given SocketImpl.
 		/// The socket takes ownership of the SocketImpl.
@@ -441,7 +441,7 @@ private:
 #endif
 
 	SocketImpl* _pImpl;
-	};
+};
 
 
 //

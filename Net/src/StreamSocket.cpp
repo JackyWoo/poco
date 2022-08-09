@@ -140,9 +140,9 @@ void StreamSocket::connectNB(const SocketAddress& address)
 }
 
 
-void StreamSocket::finishConnect()
+void StreamSocket::finishConnect(int error)
 {
-	impl()->finishConnect();
+	impl()->finishConnect(error);
 }
 
 

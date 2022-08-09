@@ -113,8 +113,6 @@ public:
 		/// On platforms/implementations where this functionality
 		/// is not available, it does nothing.
 
-	static short translateReadyMode(short mode);
-	static short translateInterestMode(short mode);
 private:
 	PollSetImpl* _pImpl;
 

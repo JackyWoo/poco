@@ -198,14 +198,10 @@ public:
 			if (_events[i].data.ptr) // skip eventfd
 			{
 				SocketMap::iterator it = _socketMap.find(_events[i].data.ptr);
-				if (it != _socketMap.end())
+				// When poll is waked up, _events[i].events maybe 0, skip it
+				if (it != _socketMap.end() && _events[i].events != 0)
 				{
-					if (_events[i].events & EPOLLIN)
-						result[it->second.first] |= PollSet::POLL_READ;
-					if (_events[i].events & EPOLLOUT)
-						result[it->second.first] |= PollSet::POLL_WRITE;
-					if (_events[i].events & EPOLLERR)
-						result[it->second.first] |= PollSet::POLL_ERROR;
+					result[it->second.first] = it->second.first.translateReadyEvents(_events[i].events, it->second.second);
 				}
 			}
 			else if (_events[i].events & EPOLLIN) // eventfd signaled
@@ -270,7 +266,7 @@ private:
 	{
 		SocketImpl* sockImpl = socket.impl();
 		int newMode = getNewMode(sockImpl, mode);
-		int ret = addFD(static_cast<int>(sockImpl->sockfd()), newMode, EPOLL_CTL_ADD, sockImpl);
+		int ret = addFD(static_cast<int>(sockImpl->sockfd()), mode, EPOLL_CTL_ADD, sockImpl);
 		if (ret == 0) socketMapUpdate(socket, newMode);
 		return ret;
 	}
@@ -279,12 +275,19 @@ private:
 	{
 		struct epoll_event ev{};
 		ev.events = 0;
-		if (mode & PollSet::POLL_READ)
-			ev.events |= EPOLLIN;
-		if (mode & PollSet::POLL_WRITE)
-			ev.events |= EPOLLOUT;
-		if (mode & PollSet::POLL_ERROR)
-			ev.events |= EPOLLERR;
+		if (ptr)
+		{
+			ev.events = static_cast<SocketImpl *>(ptr)->translateInterestMode(mode);
+		}
+		else
+		{
+			if (mode & PollSet::POLL_READ)
+				ev.events |= EPOLLIN;
+			if (mode & PollSet::POLL_WRITE)
+				ev.events |= EPOLLOUT;
+			if (mode & PollSet::POLL_ERROR)
+				ev.events |= EPOLLERR;
+		}
 		ev.data.ptr = ptr;
 		return epoll_ctl(_epollfd, op, fd, &ev);
 	}
@@ -478,6 +481,7 @@ public:
 				for (auto it = _pollfds.begin() + 1; it != _pollfds.end(); ++it)
 				{
 					std::map<poco_socket_t, Socket>::const_iterator its = _socketMap.find(it->fd);
+					// When poll is waked up, _events[i].events maybe 0, skip it
 					if (its != _socketMap.end() && it->revents != 0)
 					{
 						result[its->second] = its->second.translateReadyEvents(it->revents, _interestMode[its->first]);

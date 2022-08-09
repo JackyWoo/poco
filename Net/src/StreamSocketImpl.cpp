@@ -82,6 +82,16 @@ int StreamSocketImpl::sendBytes(const void* buffer, int length, int flags)
 short StreamSocketImpl::translateInterestMode(short mode) const
 {
 	short events{};
+#if defined(POCO_HAVE_FD_EPOLL)
+	if (mode & SELECT_READ)
+		events |= EPOLLIN;
+	if (mode & SELECT_WRITE)
+		events |= EPOLLOUT;
+	if (mode & SELECT_ERROR)
+		events |= EPOLLERR;
+	if (mode & SELECT_CONNECT)
+		events |= EPOLLOUT;
+#elif defined(POCO_HAVE_FD_POLL)
 	if (mode & SELECT_READ)
 		events |= POLLIN;
 	if (mode & SELECT_WRITE)
@@ -90,6 +100,7 @@ short StreamSocketImpl::translateInterestMode(short mode) const
 		events |= POLLERR;
 	if (mode & SELECT_CONNECT)
 		events |= POLLOUT;
+#endif
 	return events;
 }
 
@@ -97,6 +108,16 @@ short StreamSocketImpl::translateInterestMode(short mode) const
 short StreamSocketImpl::translateReadyEvents(short events, short interestMode) const
 {
 	short mode{};
+#if defined(POCO_HAVE_FD_EPOLL)
+	if (events & EPOLLIN && isConnected() && interestMode & SELECT_READ)
+		mode |= SELECT_READ;
+	if (events & EPOLLOUT && isConnected() && interestMode & SELECT_WRITE)
+		mode |= SELECT_WRITE;
+	if (events & EPOLLOUT && isConnectionPending() && interestMode & SELECT_CONNECT)
+		mode |= SELECT_CONNECT;
+	if ((events & EPOLLERR || events & EPOLLHUP) && interestMode & SELECT_ERROR)
+		mode |= SELECT_ERROR;
+#elif defined(POCO_HAVE_FD_POLL)
 	if (events & POLLIN && isConnected() && interestMode & SELECT_READ)
 		mode |= SELECT_READ;
 	if (events & POLLOUT && isConnected() && interestMode & SELECT_WRITE)
@@ -105,6 +126,7 @@ short StreamSocketImpl::translateReadyEvents(short events, short interestMode) c
 		mode |= SELECT_CONNECT;
 	if ((events & POLLERR || events & POLLHUP) && interestMode & SELECT_ERROR)
 		mode |= SELECT_ERROR;
+#endif
 	return mode;
 }
 
