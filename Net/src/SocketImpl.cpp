@@ -754,7 +754,7 @@ bool SocketImpl::poll(const Poco::Timespan& timeout, int mode)
 		evin.events |= EPOLLERR;
 	if (mode & SELECT_CONNECT)
 		evin.events |= EPOLLOUT;
-	if (mode & SELECT_ERROR)
+	if (mode & SELECT_ACCEPT)
 		evin.events |= EPOLLIN;
 
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, sockfd, &evin) < 0)

@@ -266,7 +266,7 @@ private:
 	{
 		SocketImpl* sockImpl = socket.impl();
 		int newMode = getNewMode(sockImpl, mode);
-		int ret = addFD(static_cast<int>(sockImpl->sockfd()), mode, EPOLL_CTL_ADD, sockImpl);
+		int ret = addFD(static_cast<int>(sockImpl->sockfd()), newMode, EPOLL_CTL_ADD, sockImpl);
 		if (ret == 0) socketMapUpdate(socket, newMode);
 		return ret;
 	}
